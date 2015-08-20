@@ -1,2 +1,2 @@
 #!/bin/bash
-nodejs autoScaleAgent.js $@ 
+nodejs autoScale.js $@ 

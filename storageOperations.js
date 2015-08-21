@@ -1,11 +1,13 @@
 var fs = require('fs'),
     os = require('os'),
     azureStorage = require('azure-storage'),
-    exec = require('child_process').exec;
+    exec = require('child_process').exec, 
+    logger = require('./logger.js');
 
-//var name = "garstoragetest1111";
-//var key = "yksauNF3rCq6Xc0pp9UtQAvt3ySfSOdxU07MOuixMJBa9MAnuLJfrwlej0X3qoDEtQgq0/1xWsiu5z3cj7Gi3A==";
-//var tableName = 'diagnosticsTable';
+var log = logger.LOG;
+var name = "garstoragewarm6";
+var key = "1gyztSLr7QcnCGPTfhesqFTXYdH2DY69SgT1KU7RaU5IFOiePyxcPfroR0rXkW+Ivj9qCZT2vwdyw4oHgiDftQ==";
+var tableName = 'diagnosticsTable';
 
 function StorageOperations(accountName, accessKey, tableName) {
     if (accountName === null || accountName === undefined) {
@@ -24,7 +26,7 @@ function StorageOperations(accountName, accessKey, tableName) {
     this.tableName = tableName;
 };
 
-StorageOperations.prototype.readTable = function (callback){
+StorageOperations.prototype.readTable = function (callback) {
     try {
         var tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         var query = new azureStorage.TableQuery().select(['RowKey', 'Percentage']).where('PartitionKey eq ?', 'CpuUsage');
@@ -34,7 +36,7 @@ StorageOperations.prototype.readTable = function (callback){
                 //console.log(error.message);
                 return callback(error.message, null);
             }
-            
+            log.info('Storage read status code:' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 return callback(null, result.entries);
             }
@@ -48,7 +50,7 @@ StorageOperations.prototype.readTable = function (callback){
     }
 }
 
-StorageOperations.prototype.writeTable = function (usage, callback){
+StorageOperations.prototype.writeTable = function (usage, callback) {
     try {
         var tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         tableSvc.tableName = this.tableName;
@@ -57,7 +59,7 @@ StorageOperations.prototype.writeTable = function (usage, callback){
                 //console.log(error);
                 return callback(error.message, null);
             }
-            
+            log.info('Storage write status code:' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 //console.log(response.statusCode);
                 var child = exec('hostname', function (error, stdout, stderr) {
@@ -84,14 +86,14 @@ StorageOperations.prototype.writeTable = function (usage, callback){
                                 //console.log(error);
                                 return callback(error.message, null);
                             }
-                           
+                            log.info('Status code' + response.statusCode);
                             //console.log(response.statusCode);
                             callback(null, response.statusCode);
                             
                         });
                     } catch (e) {
                         callback(e.message, null);
-                    }         
+                    }
                 });
             }
             else {
@@ -104,11 +106,11 @@ StorageOperations.prototype.writeTable = function (usage, callback){
     }
 }
 
-//var t = new StorageOperations(name, key, tableName);
-//t.writeTable(45, function (err, result) {
-//    console.log(result);
-//    console.log(err);
-//});
+var t = new StorageOperations(name, key, tableName);
+t.writeTable(45, function (err, result) {
+    console.log(result);
+    console.log(err);
+});
 
 //t.readTable(function (err, result) {
 //    console.log(result);

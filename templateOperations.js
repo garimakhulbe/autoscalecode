@@ -50,7 +50,7 @@ TemplateOperations.prototype.getDeploymentTemplate = function (callback) {
                         var armTemplate = {
                             "properties": {
                                 "template": jsonTemplateObj,
-                                "mode": "Complete",
+                                "mode": "Incremental",
                                 "parameters": jsonParameterObj.parameters
                             }
                         }

@@ -8,16 +8,17 @@ var fs = require('fs'),
     common = require("azure-common");
 
 var templateOperations = require('./templateOperations'),
-    storageOperations = require('./storageOperations');
+    storageOperations = require('./storageOperations'),
+    logger = require('./logger.js');
 
 var tableName = 'diagnosticsTable';
-    
+
 var intervalId;
 var intervalIdDeploymentStatus;
 var timerId;
 var self;
 var fileDir = path.normalize('.//files');
-
+var log = logger.LOG;
 
 var AutoscaleAgentOperations = (function (configFileUrl) {
     
@@ -25,12 +26,12 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     function AutoscaleAgentOperations(configFileUrl) {
         
         if (configFileUrl === null || configFileUrl === undefined) {
-            console.log('Configuration file cannot be null.');
+            log.error('Configuration file cannot be null.');
             return;
         }
         self = this;
-        console.log(configFileUrl);
-      
+        log.info('Config file url:'+configFileUrl);
+        
         try {
             
             var inputJson = JSON.parse(fs.readFileSync(configFileUrl, 'utf8'));
@@ -42,31 +43,31 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                                 inputJson.parameters.Credentials.StorageAccessKey,
                                 tableName);
             if (inputJson.parameters.Credentials.TenantId === null || inputJson.parameters.Credentials.TenantId === undefined) {
-                console.log('TenantId cannot be null.');
+                log.error('TenantId cannot be null.');
                 return;
             }
             if (inputJson.parameters.Credentials.ClientId === null || inputJson.parameters.Credentials.ClientId === undefined) {
-                console.log('clientId cannot be null.');
+                log.error('clientId cannot be null.');
                 return;
             }
             if (inputJson.parameters.Credentials.ClientSecret === null || inputJson.parameters.Credentials.ClientSecret === undefined) {
-                console.log('clientSecret cannot be null.');
+                log.error('clientSecret cannot be null.');
                 return;
             }
             if (inputJson.parameters.Credentials.SubscriptionId === null || inputJson.parameters.Credentials.SubscriptionId === undefined) {
-                console.log('subscriptionId cannot be null.');
+                log.error('subscriptionId cannot be null.');
                 return;
             }
             if (inputJson.parameters.Autoscale.ResourceGroup === null || inputJson.parameters.Autoscale.ResourceGroup === undefined) {
-                console.log('resourceGroup cannot be null.');
+                log.error('resourceGroup cannot be null.');
                 return;
             }
             if (inputJson.parameters.Autoscale.ThresholdPercentage.Upper === null || inputJson.parameters.Autoscale.ThresholdPercentage.Upper === undefined) {
-                console.log('upperThreshold cannot be null.');
+                log.error('upperThreshold cannot be null.');
                 return;
             }
             if (inputJson.parameters.Autoscale.NodeCount === null || inputJson.parameters.Autoscale.NodeCount === undefined/*|| inputJson.parameters.Credentials.count === 0*/) {
-                console.log('upperThreshold cannot be null or 0');
+                log.error('upperThreshold cannot be null or 0');
                 return;
             }
             this.tenant = inputJson.parameters.Credentials.TenantId;
@@ -78,7 +79,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
             this.count = inputJson.parameters.Autoscale.NodeCount;
             
         } catch (e) {
-            console.log(e.message);
+            log.error(e.message);
             return;
         }
        
@@ -87,80 +88,95 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     }
     
     AutoscaleAgentOperations.prototype.init = function () {
-        console.log('Checking the resource group status');
-        console.log('Starting Autoscale agent...');
+        log.info('Starting Autoscale agent...');
+
         self.templateOperations.getDeploymentTemplate(function (err, template) {
+            log.info('downloaded the template.');
             if (err) {
-                console.log(err.message);
+                log.error(err.message);
                 return;
             }
             try {
-                self.template = template;
-                intervalId = setInterval(function () {
+                self.template = template; 
+                waitForSlaves(template.properties.parameters.slaveCount.value, function (err, result) {
+                    log.info('All slaves are up...Started monitoring the CPU usage');
                     monitorStorage(function (err, result) {
                         if (err) {
-                            console.log(err);
+                                log.error(err.message);
+                           
                             if (intervalId)
                                 clearInterval(intervalId);
                             if (intervalIdDeploymentStatus)
-                                clearinterval(intervalIdDeploymentStatus);
+                                clearInterval(intervalIdDeploymentStatus);
                             return;
                         }
-                  });
-                }, 10000);  //monitoring storage
+                    });
+                });
             } catch (e) {
                 if (intervalId)
                     clearInterval(intervalId);
                 if (intervalIdDeploymentStatus)
-                    clearinterval(intervalIdDeploymentStatus);
-                console.log(e.message);
+                    clearInterval(intervalIdDeploymentStatus);
+                log.error(e.message);
                 return;
             }
         });
     }
     
-    function monitorStorage(callback) {
-        console.log('Monitoring storage for CPU usage...');
-        self.storageOperations.readTable(function (err, percentage) {
-            if (err) {
-                return callback(err, null);
-            }
-            try {
-                p = calculateAverageCpuLoad(percentage);
-                console.log('Percentage:'+p);
-                var scaling = new events.EventEmitter();
-                if (p > self.upperThreshold) {
-                    console.log('Scaling up...');
-                    clearInterval(intervalId);  //clear monitoring timeout
-                    scaling.on('scaleup', function () {
-                        scaleUp(self.count, self.template, function (err, result) {
-                            if (err) {
-                                console.log(err);
-                                if (intervalId)
-                                    clearInterval(intervalId);
-                                if(intervalIdDeploymentStatus)
-                                    clearinterval(intervalIdDeploymentStatus);
-                                return callback(err, null);
-                            }
-                        });
-                    });  // call scaleup
-                    scaling.emit('scaleup');
+    function waitForSlaves(slaveCount, callback){
+        log.info('Waiting for slaves to get up..');
+        var intId = setInterval(function () {
+            self.storageOperations.readTable(function (err, storageEntries) {
+                if (err) {
+                    clearInterval(intId);
+                    return callback(err, null);
                 }
-            } catch (e) {
-                if (intervalId)
-                    clearInterval(intervalId);
-                if (intervalIdDeploymentStatus)
-                    clearinterval(intervalIdDeploymentStatus);
-                callback(e, null);
-            }
-        });  
+                log.info('SlaveCount:'+ slaveCount+' Storage Entries:'+ storageEntries.length);
+                if (storageEntries.length === slaveCount) {
+                    clearInterval(intId);
+                    return callback(null);
+                }  
+            });
+        }, 5000);
+    }
+    
+    function monitorStorage(callback) {
+        var intervalId = setInterval(function () {
+            console.log('Monitoring the CPU usage...');
+            self.storageOperations.readTable(function (err, percentage) {
+                if (err) {
+                    clearInterval(intervalId); 
+                    return callback(err, null);
+                }
+                
+                try {
+                    var p = calculateAverageCpuLoad(percentage);
+                    log.info('CPU usage of the cluster at this time:' + p);
+                    var scaling = new events.EventEmitter();
+                    if (p > self.upperThreshold) {
+                        log.info('Scaling up...');
+                        clearInterval(intervalId);  //clear monitoring timeout
+                        scaling.on('scaleup', function () {
+                            scaleUp(self.count, self.template, function (err, result) {
+                                if (err) {
+                                    return callback(err, null);
+                                }
+                            });
+                        });  // call scaleup
+                        scaling.emit('scaleup');
+                    }
+                } catch (e) {
+                    callback(e, null);
+                }
+            });
+        }, 10000);  //monitoring storage
     }
     
     function scaleUp(count, template, callback) {
         try {
             template.properties.parameters.slaveCount.value = template.properties.parameters.slaveCount.value + count; // creating template
             fs.writeFileSync(self.templateOperations.deploymentTemplate, JSON.stringify(template, null, 4));
-            console.log('Slave count:' + template.properties.parameters.slaveCount.value);
+            log.info('Total slave count after scaling up:' + template.properties.parameters.slaveCount.value);
             //console.log('count:' + template.properties.parameters.Count.value);
             getToken(function (err, token) {
                 if (err) {
@@ -169,45 +185,54 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                 try {
                     var resourceManagementClient = getResourceManagementClient(self.subscriptionId, token);
                     self.deploymentName = "Testdeployment" + getRandomInt(1, 100000);
-                    console.log('Deploying ' + self.deploymentName);
+                    
                     resourceManagementClient.deployments.createOrUpdate(self.resourceGroup, self.deploymentName, template , function (err, result) {
                         if (err) {
                             return callback(err, null);
                         }
                         try {
+                            log.info('Deploying ' + self.deploymentName);
+                            log.info('Status of deployment:' + result.statusCode);
                             intervalIdDeploymentStatus = setInterval(function () {
-                                getDeploymentStatus(function (err, result) {
+                                checkDeploymentStatus(function (err, result) {
                                     if (err) {
-                                        if (intervalId)
-                                            clearInterval(intervalId);
-                                        if (intervalIdDeploymentStatus)
-                                            clearinterval(intervalIdDeploymentStatus);
                                         return callback(err, null);
                                     }
+                                    
+                                    if (result === 'Succeeded') {
+                                        clearInterval(intervalIdDeploymentStatus);
+                                        
+                                        setTimeout(function () {
+                                            console.log("Setting timeout for system to settle down after scaling operation!!");
+                                            self.init();
+                                        }, 120000);
+                                        /*var timerId = setTimeout(function () {
+                                            clearTimeout(timerId);
+                                            monitorStorage(function (err, result) {
+                                                if (err) {
+                                                    log.error('Monitor storage:' + err);
+                                                    if (intervalId)
+                                                        clearInterval(intervalId);
+                                                    if (intervalIdDeploymentStatus)
+                                                        clearinterval(intervalIdDeploymentStatus);
+                                                    return;
+                                                }
+                                            });
+                                        }, 120000);*/
+                                    }
+
                                 });
                             }, 60000); //check status periodically
                         } catch (e) {
-                            if (intervalId)
-                                clearInterval(intervalId);
-                            if (intervalIdDeploymentStatus)
-                                clearinterval(intervalIdDeploymentStatus);
                             callback(e, null);
                         }
                     });
                 } catch (e) {
-                    if (intervalId)
-                        clearInterval(intervalId);
-                    if (intervalIdDeploymentStatus)
-                        clearinterval(intervalIdDeploymentStatus);
-                    callback(e, null);
+                    return callback(e, null);
                 }
             });
         } catch (e) {
-            if (intervalId)
-                clearInterval(intervalId);
-            if (intervalIdDeploymentStatus)
-                clearinterval(intervalIdDeploymentStatus);
-            callback(e, null);
+            return callback(e, null);
         }
     }
     
@@ -228,7 +253,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
         return (sum / percentage.length);
     }
     
-    var getToken = function(callback) {
+    var getToken = function (callback) {
         var AuthenticationContext = adal.AuthenticationContext;
         var authorityHostUrl = 'https://login.windows.net';
         var authorityUrl = authorityHostUrl + '/' + self.tenant;
@@ -240,7 +265,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
             callback(null, tokenResponse.accessToken);
         });
     }
-
+    
     function getRandomInt(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
@@ -250,10 +275,11 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
             subscriptionId: subscriptionId,
             token: token
         }));
+        
         return resourceManagementClient;
     }
     
-    function getDeploymentStatus(callback) {
+    function checkDeploymentStatus(callback) {
         getToken(function (err, token) {
             if (err) {
                 return callback(err, null);
@@ -265,33 +291,14 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                     if (err) {
                         return callback(err, null);
                     }
+                    log.info("Status code:"+data.statusCode);
                     if (data.deployment.properties.provisioningState === 'Running' || data.deployment.properties.provisioningState === 'Accepted') {
                         console.log('Deploying status:' + data.deployment.properties.provisioningState);
                     } else if (data.deployment.properties.provisioningState === 'Failed') {
-                        throw new Error('Deployment Failed');
-                    }
-                    else {
-                        clearInterval(intervalIdDeploymentStatus);
-                        console.log('Deployment status ' + data.deployment.properties.provisioningState);
-                        console.log("Setting timeout for system to settle down after scaling operation!!");
-                        var timerId = setTimeout(function () {
-                            clearTimeout(timerId);
-                            console.log("Start Monitoring again!!");
-                            intervalId = setInterval(function () {
-                                monitorStorage(function (err, result) {
-                                    if (err) {
-                                        console.log('Monitor storage:' + err);
-                                        if (intervalId)
-                                            clearInterval(intervalId);
-                                        if (intervalIdDeploymentStatus)
-                                            clearinterval(intervalIdDeploymentStatus);
-                                        return;
-                                    }
-                                });
-                            }, 10000);
-                        }, 120000);
-            
-                    }
+                        return callback(new Error('Deployment Failed'));
+                    } else {
+                        return callback(null, data.deployment.properties.provisioningState);
+                    }      
                 });
             } catch (e) {
                 callback(e, null);
@@ -306,7 +313,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
 
 
 var AutoscaleNodeOperations = (function (configFileUrl) {
-
+    
     function AutoscaleNodeOperations(configFileUrl) {
         
         if (configFileUrl === null || configFileUrl === undefined) {
@@ -318,7 +325,7 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
         
         try {
             var inputJson = JSON.parse(fs.readFileSync(configFileUrl, 'utf8'));
-                
+            
             this.storageOperations = new storageOperations.StorageOperations(inputJson.parameters.Credentials.StorageAccountName,
                                 inputJson.parameters.Credentials.StorageAccessKey,
                                 tableName);
@@ -328,7 +335,7 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
         }
 
     }
-
+    
     function getStats() {
         var statFile = fs.readFileSync('/proc/stat', 'utf8');
         //console.log(statFile);
@@ -338,7 +345,7 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
         console.log(stats);
         return stats;
     }
-
+    
     function writeUsageToStorage(callback) {
         try {
             console.log('Calculating CPU load....');
@@ -377,16 +384,16 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
             return callback(e, null);
         }
     }
-
+    
     AutoscaleNodeOperations.prototype.init = function () {
         try {
             intervalId = setInterval(function () {
                 console.log('Next interval started');
                 writeUsageToStorage(function (err, result) {
                     if (err) {
-                        if(timerId)
+                        if (timerId)
                             clearTimeout(timerId);
-                        if(intervalId)
+                        if (intervalId)
                             clearInterval(intervalId);
                         return;
                     }
@@ -400,21 +407,20 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
             console.log(e);
         }
     }
-
+    
     return AutoscaleNodeOperations;
 })();
 
 
 
-function start()
-{
+function start() {
     var autoscale;
     console.log(process.argv[3]);
     downloadJson(process.argv[3], 'inputParameters', function (err, filename) {
         console.log(filename);
         if (process.argv[2] === 'agent') {
-        autoscale = new AutoscaleAgentOperations(filename);
-        autoscale.init();
+            autoscale = new AutoscaleAgentOperations(filename);
+            autoscale.init();
         }
         else {
             autoscale = new AutoscaleNodeOperations(filename);

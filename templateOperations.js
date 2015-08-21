@@ -1,5 +1,5 @@
 var fs = require("fs"),
-    https= require("https"),
+    https = require("https"),
     path = require('path');
 
 
@@ -15,25 +15,25 @@ function TemplateOperations(templateUri, parameterUri) {
     if (templateUri === null || templateUri === undefined) {
         throw new Error('TemplateUri cannot be null.');
     }
-        
+    
     if (parameterUri === null || parameterUri === undefined) {
         throw new Error('parameterUri cannot be null.');
     }
     this.templateUri = templateUri;
     this.parameterUri = parameterUri;
-    this.deploymentTemplate = path.normalize(fileDir +'//'+ deploymentTemplate);
+    this.deploymentTemplate = path.normalize(fileDir + '//' + deploymentTemplate);
 };
 
 
 
-TemplateOperations.prototype.getDeploymentTemplate = function (callback){
+TemplateOperations.prototype.getDeploymentTemplate = function (callback) {
     self = this;
-   
-    try{
+    
+    try {
         if (!fs.existsSync(self.deploymentTemplate)) {
-           
+            
             downloadJson(self.templateUri, 'template', function (err, templateFilePath) {
-               if (err) {
+                if (err) {
                     return callback(err.message, null);
                 }
                 
@@ -41,7 +41,7 @@ TemplateOperations.prototype.getDeploymentTemplate = function (callback){
                     if (err) {
                         return callback(err.message, null);
                     }
-
+                    
                     try {
                         //console.log(parameterFilePath)
                         var jsonTemplateObj = JSON.parse(fs.readFileSync(templateFilePath, 'utf8'));
@@ -70,7 +70,7 @@ TemplateOperations.prototype.getDeploymentTemplate = function (callback){
         else {
             var template = JSON.parse(fs.readFileSync(self.deploymentTemplate, 'utf8'));
             callback(null, template);
-        }     
+        }
     } catch (e) {
         callback(e, null);
     }
@@ -84,7 +84,7 @@ function downloadJson(url, file, callback) {
         res.on('data', function (data) {
             body += data;
         });
-
+        
         res.on('end', function () {
             try {
                 fs.mkdirSync(fileDir);
@@ -92,17 +92,17 @@ function downloadJson(url, file, callback) {
                 if (e.code != 'EEXIST')
                     callback(e, null);
             }
-
+            
             try {
                 var name = fileDir + '//' + file + '.json';
                 console.log('name' + name);
                 fs.writeFileSync(name, body);
                 callback(null, name);
-            } catch (e) {    
+            } catch (e) {
                 callback(e, null);
-            }  
+            }
         });
-
+        
         res.on('error', function () {
             return callback(error, null);
         });
@@ -110,7 +110,7 @@ function downloadJson(url, file, callback) {
     }).on('error', function (e) {
         console.error(e);
         callback(e, null);
-        });
+    });
 }
 
 

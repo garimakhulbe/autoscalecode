@@ -5,9 +5,11 @@ var fs = require('fs'),
     logger = require('./logger.js');
 
 var log = logger.LOG;
-var name = "garstoragewarm6";
-var key = "1gyztSLr7QcnCGPTfhesqFTXYdH2DY69SgT1KU7RaU5IFOiePyxcPfroR0rXkW+Ivj9qCZT2vwdyw4oHgiDftQ==";
-var tableName = 'diagnosticsTable';
+//var name = "garstoragewarm6";
+//var key = "1gyztSLr7QcnCGPTfhesqFTXYdH2DY69SgT1KU7RaU5IFOiePyxcPfroR0rXkW+Ivj9qCZT2vwdyw4oHgiDftQ==";
+//var tableName = 'diagnosticsTable';
+var hostname = process.env['HOME_VM'];
+var tableSvc;
 
 function StorageOperations(accountName, accessKey, tableName) {
     if (accountName === null || accountName === undefined) {
@@ -28,20 +30,19 @@ function StorageOperations(accountName, accessKey, tableName) {
 
 StorageOperations.prototype.readTable = function (callback) {
     try {
-        var tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
+        tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         var query = new azureStorage.TableQuery().select(['RowKey', 'Percentage']).where('PartitionKey eq ?', 'CpuUsage');
         
         tableSvc.queryEntities(this.tableName, query, null , function (error, result, response) {
             if (error) {
-                //console.log(error.message);
                 return callback(error.message, null);
             }
-            log.info('Storage read status code:' + response.statusCode);
+            log.info('STROAGE READ STATUS :' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 return callback(null, result.entries);
             }
             else {
-                err = new Error('Status code:' + response.statusCode);
+                err = new Error('ERROR CODE' + response.statusCode);
                 return callback(err, null);
             }
         });
@@ -52,52 +53,42 @@ StorageOperations.prototype.readTable = function (callback) {
 
 StorageOperations.prototype.writeTable = function (usage, callback) {
     try {
-        var tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
+        tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         tableSvc.tableName = this.tableName;
+        log.info("TABLE NAME : " + tableSvc.tableName);
         tableSvc.createTableIfNotExists(tableSvc.tableName, function (error, result, response) {
             if (error) {
-                //console.log(error);
                 return callback(error.message, null);
             }
-            log.info('Storage write status code:' + response.statusCode);
+            log.info('STORAGE TABLE EXIST, STATUS:' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 //console.log(response.statusCode);
-                var child = exec('hostname', function (error, stdout, stderr) {
-                    if (error) {
-                        //console.log(error);
-                        return callback(error.message, null);
-                    }
-                    
-                    try {
-                        var hostname = stdout.replace(/\n|\r/g, '');
-                        //console.log(hostname);
-                        console.log(usage);
-                        var entGen = azureStorage.TableUtilities.entityGenerator;
-                        var entity = {
-                            PartitionKey: entGen.String('CpuUsage'),
-                            RowKey: entGen.String(hostname),
-                            Percentage: entGen.Double(usage),
-                            dateValue: entGen.DateTime(new Date(Date.UTC(2011, 10, 25))),
-                            complexDateValue: entGen.DateTime(new Date(Date.UTC(2013, 02, 16, 01, 46, 20)))
-                        };
+                
+                if (hostname !== undefined) {
+                    console.log('1');
+                    self.insertEntity(usage, hostname, function (err, result) {
+                        if (err) {
+                            return callback(err);
+                        }
                         
-                        tableSvc.insertOrReplaceEntity(tableSvc.tableName, entity, function (error, result, response) {
-                            if (error) {
-                                //console.log(error);
-                                return callback(error.message, null);
+                    });
+                } else {
+                    var child = exec('hostname', function (error, stdout, stderr) {
+                        if (error) {
+                            //console.log(error);
+                            return callback(error.message, null);
+                        }
+                        insertEntity(usage, stdout, function (err, result) {
+                            if (err) {
+                                return callback(err);
                             }
-                            log.info('Status code' + response.statusCode);
-                            //console.log(response.statusCode);
-                            callback(null, response.statusCode);
                             
                         });
-                    } catch (e) {
-                        callback(e.message, null);
-                    }
-                });
+                    });
+                }               
             }
             else {
-                err = new Error('Status code:' + response.statusCode);
+                err = new Error('ERROR STATUS CODE:' + response.statusCode);
                 return callback(err, null);
             }
         });
@@ -106,11 +97,41 @@ StorageOperations.prototype.writeTable = function (usage, callback) {
     }
 }
 
-var t = new StorageOperations(name, key, tableName);
-t.writeTable(45, function (err, result) {
-    console.log(result);
-    console.log(err);
-});
+var insertEntity = function (usage, hostname, callback){
+    try {
+        var host = hostname.replace(/\n|\r/g, '');
+        log.info('ENTRY FOR HOSTNAME:' + host);
+        log.info('USAGE:' + usage);
+       
+        var entGen = azureStorage.TableUtilities.entityGenerator;
+        var entity = {
+            PartitionKey: entGen.String('CpuUsage'),
+            RowKey: entGen.String(host),
+            Percentage: entGen.Double(usage),
+            dateValue: entGen.DateTime(new Date(Date.UTC(2011, 10, 25))),
+            complexDateValue: entGen.DateTime(new Date(Date.UTC(2013, 02, 16, 01, 46, 20)))
+        };
+        
+        tableSvc.insertOrReplaceEntity(tableSvc.tableName, entity, function (error, result, response) {
+            if (error) {
+                //console.log(error);
+                return callback(error.message, null);
+            }
+            log.info('INSERT STATUS CODE: ' + response.statusCode);
+            //console.log(response.statusCode);
+            return callback(null, response.statusCode);
+                            
+        });
+    } catch (e) {
+        callback(e.message, null);
+    }
+}
+
+//var t = new StorageOperations(name, key, tableName);
+//t.writeTable(45, function (err, result) {
+//    console.log(result);
+//    console.log(err);
+//});
 
 //t.readTable(function (err, result) {
 //    console.log(result);

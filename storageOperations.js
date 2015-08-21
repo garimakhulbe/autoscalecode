@@ -8,7 +8,7 @@ var log = logger.LOG;
 //var name = "garstoragewarm6";
 //var key = "1gyztSLr7QcnCGPTfhesqFTXYdH2DY69SgT1KU7RaU5IFOiePyxcPfroR0rXkW+Ivj9qCZT2vwdyw4oHgiDftQ==";
 //var tableName = 'diagnosticsTable';
-var hostname = process.env['HOME_VM'];
+var hostname = process.env.HOME_VM;
 var tableSvc;
 
 function StorageOperations(accountName, accessKey, tableName) {
@@ -51,7 +51,7 @@ StorageOperations.prototype.readTable = function (callback) {
     }
 }
 
-StorageOperations.prototype.writeTable = function (usage, callback) {
+StorageOperations.prototype.writeTable = function (usage, resourceGroup, callback) {
     try {
         tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         tableSvc.tableName = this.tableName;
@@ -66,7 +66,7 @@ StorageOperations.prototype.writeTable = function (usage, callback) {
                 
                 if (hostname !== undefined) {
                     console.log('1');
-                    self.insertEntity(usage, hostname, function (err, result) {
+                    insertEntity(usage, hostname, resourceGroup, function (err, result) {
                         if (err) {
                             return callback(err);
                         }
@@ -78,7 +78,7 @@ StorageOperations.prototype.writeTable = function (usage, callback) {
                             //console.log(error);
                             return callback(error.message, null);
                         }
-                        insertEntity(usage, stdout, function (err, result) {
+                        insertEntity(usage, stdout, resourceGroup, function (err, result) {
                             if (err) {
                                 return callback(err);
                             }
@@ -97,7 +97,7 @@ StorageOperations.prototype.writeTable = function (usage, callback) {
     }
 }
 
-var insertEntity = function (usage, hostname, callback){
+var insertEntity = function (usage, hostname, resourceGroup, callback){
     try {
         var host = hostname.replace(/\n|\r/g, '');
         log.info('ENTRY FOR HOSTNAME:' + host);
@@ -108,7 +108,7 @@ var insertEntity = function (usage, hostname, callback){
             PartitionKey: entGen.String('CpuUsage'),
             RowKey: entGen.String(host),
             Percentage: entGen.Double(usage),
-            dateValue: entGen.DateTime(new Date(Date.UTC(2011, 10, 25))),
+            ResourceGroup : entGen.String(resourceGroup),
             complexDateValue: entGen.DateTime(new Date(Date.UTC(2013, 02, 16, 01, 46, 20)))
         };
         

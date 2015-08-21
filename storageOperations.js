@@ -8,7 +8,7 @@ var log = logger.LOG;
 //var name = "garstoragewarm6";
 //var key = "1gyztSLr7QcnCGPTfhesqFTXYdH2DY69SgT1KU7RaU5IFOiePyxcPfroR0rXkW+Ivj9qCZT2vwdyw4oHgiDftQ==";
 //var tableName = 'diagnosticsTable';
-var hostname = process.env.HOME_VM;
+var hostname = process.env.HOST_VM;
 var tableSvc;
 
 function StorageOperations(accountName, accessKey, tableName) {

@@ -1,6 +1,7 @@
 var fs = require("fs"),
     https = require("https"),
-    path = require('path');
+    path = require('path'),
+    logger = require('./logger.js');
 
 
 
@@ -10,14 +11,15 @@ var fs = require("fs"),
 var deploymentTemplate = 'deploymentTemplate.json';
 var fileDir = './/files';
 var self;
+var log = logger.LOG;
 
 function TemplateOperations(templateUri, parameterUri) {
     if (templateUri === null || templateUri === undefined) {
-        throw new Error('TemplateUri cannot be null.');
+        throw new Error('TEMPLATEURI CANNOT BE NULL.');
     }
     
     if (parameterUri === null || parameterUri === undefined) {
-        throw new Error('parameterUri cannot be null.');
+        throw new Error('PARAMETERURI CANNOT BE NULL.');
     }
     this.templateUri = templateUri;
     this.parameterUri = parameterUri;
@@ -95,7 +97,7 @@ function downloadJson(url, file, callback) {
             
             try {
                 var name = fileDir + '//' + file + '.json';
-                console.log('name' + name);
+                //console.log('name' + name);
                 fs.writeFileSync(name, body);
                 callback(null, name);
             } catch (e) {

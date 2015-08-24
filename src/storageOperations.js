@@ -65,7 +65,7 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
                 //console.log(response.statusCode);
                 
                 if (hostname !== undefined) {
-                    console.log('1');
+                    
                     insertEntity(usage, hostname, resourceGroup, function (err, result) {
                         if (err) {
                             return callback(err);
@@ -85,7 +85,7 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
                             
                         });
                     });
-                }               
+                }
             }
             else {
                 err = new Error('ERROR STATUS CODE:' + response.statusCode);
@@ -97,12 +97,12 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
     }
 }
 
-var insertEntity = function (usage, hostname, resourceGroup, callback){
+var insertEntity = function (usage, hostname, resourceGroup, callback) {
     try {
         var host = hostname.replace(/\n|\r/g, '');
         log.info('ENTRY FOR HOSTNAME:' + host);
         log.info('USAGE:' + usage);
-       
+        
         var entGen = azureStorage.TableUtilities.entityGenerator;
         var entity = {
             PartitionKey: entGen.String('CpuUsage'),

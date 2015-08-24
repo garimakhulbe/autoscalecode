@@ -19,18 +19,25 @@ var timerId;
 var self;
 var fileDir = path.normalize('.//files');
 var log = logger.LOG;
+var i;
 
 var AutoscaleAgentOperations = (function (configFileUrl) {
     
     /*Constructor*/
     function AutoscaleAgentOperations(configFileUrl) {
         
+        self = this;
+        i = 0;
+        timerId = null;
+        intervalIdDeploymentStatus = null;
+        intervalId = null;
+
         if (configFileUrl === null || configFileUrl === undefined) {
             log.error('Configuration file cannot be null.');
             return;
         }
-        self = this;
-        log.info('Config file url:'+configFileUrl);
+    
+        log.info('CONFIG FILE URL:' + configFileUrl);
         
         try {
             
@@ -88,22 +95,22 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     }
     
     AutoscaleAgentOperations.prototype.init = function () {
-        log.info('Starting Autoscale agent...');
-
+        log.info('STARTING AUTOSCALE AGENT...');
+        
         self.templateOperations.getDeploymentTemplate(function (err, template) {
-            log.info('downloaded the template.');
+            log.info('DOWNLOADED THE TEMPLATE.');
             if (err) {
                 log.error(err.message);
                 return;
             }
             try {
-                self.template = template; 
+                self.template = template;
                 waitForSlaves(template.properties.parameters.slaveCount.value, function (err, result) {
-                    log.info('All slaves are up...Started monitoring the CPU usage');
+                    log.info('ALL SLAVES ARE UP..STARTED MONITORING THE USAGE.');
                     monitorStorage(function (err, result) {
                         if (err) {
-                                log.error(err.message);
-                           
+                            log.error(err.message);
+                            
                             if (intervalId)
                                 clearInterval(intervalId);
                             if (intervalIdDeploymentStatus)
@@ -123,38 +130,49 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
         });
     }
     
-    function waitForSlaves(slaveCount, callback){
-        log.info('Waiting for slaves to get up..');
+    function waitForSlaves(slaveCount, callback) {
+        log.info('WAITING FOR ALL NODES TO GET UP');
         var intId = setInterval(function () {
             self.storageOperations.readTable(function (err, storageEntries) {
                 if (err) {
                     clearInterval(intId);
                     return callback(err, null);
                 }
-                log.info('SlaveCount:'+ slaveCount+' Storage Entries:'+ storageEntries.length);
+                log.info('ACTUAL SLAVE COUNT:' + slaveCount + ' # OF SLAVES UP:' + storageEntries.length);
                 if (storageEntries.length === slaveCount) {
                     clearInterval(intId);
                     return callback(null);
-                }  
+                }
             });
         }, 5000);
     }
     
     function monitorStorage(callback) {
         var intervalId = setInterval(function () {
-            console.log('Monitoring the CPU usage...');
+            log.info('MONITORING CPU.');
             self.storageOperations.readTable(function (err, percentage) {
                 if (err) {
-                    clearInterval(intervalId); 
+                    clearInterval(intervalId);
                     return callback(err, null);
                 }
                 
                 try {
                     var p = calculateAverageCpuLoad(percentage);
-                    log.info('CPU usage of the cluster at this time:' + p);
-                    var scaling = new events.EventEmitter();
                     if (p > self.upperThreshold) {
-                        log.info('Scaling up...');
+                        log.warn('CPU USAGE PERCENTAGE' + p);
+                        i++;
+                    } else {
+                        log.info('CPU USAGE PERCENTAGE' + p);
+                        i--;
+                        if (i < 0)
+                            i = 0;
+                    }
+                    
+                    //log.info('CPU usage of the cluster at this time:' + p);
+                    var scaling = new events.EventEmitter();
+                    if (i >= 3) {
+                        i = 0;
+                        log.info('SCALING UP');
                         clearInterval(intervalId);  //clear monitoring timeout
                         scaling.on('scaleup', function () {
                             scaleUp(self.count, self.template, function (err, result) {
@@ -175,8 +193,8 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     function scaleUp(count, template, callback) {
         try {
             template.properties.parameters.slaveCount.value = template.properties.parameters.slaveCount.value + count; // creating template
-            fs.writeFileSync(self.templateOperations.deploymentTemplate, JSON.stringify(template, null, 4));
-            log.info('Total slave count after scaling up:' + template.properties.parameters.slaveCount.value);
+            
+            log.info('TOTAL SLAVE COUNT AFTER SCALING UP:' + template.properties.parameters.slaveCount.value);
             //console.log('count:' + template.properties.parameters.Count.value);
             getToken(function (err, token) {
                 if (err) {
@@ -191,8 +209,8 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                             return callback(err, null);
                         }
                         try {
-                            log.info('Deploying ' + self.deploymentName);
-                            log.info('Status of deployment:' + result.statusCode);
+                            log.info('DEPLOYING ' + self.deploymentName);
+                            log.info('STATUS OF DEPLOYMENT:' + result.statusCode);
                             intervalIdDeploymentStatus = setInterval(function () {
                                 checkDeploymentStatus(function (err, result) {
                                     if (err) {
@@ -201,24 +219,11 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                                     
                                     if (result === 'Succeeded') {
                                         clearInterval(intervalIdDeploymentStatus);
-                                        
+                                        fs.writeFileSync(self.templateOperations.deploymentTemplate, JSON.stringify(template, null, 4));
                                         setTimeout(function () {
-                                            console.log("Setting timeout for system to settle down after scaling operation!!");
+                                            console.log("SETTING TIMEOUT FOR CPU LOAD TO SETTLE DOWN!!");
                                             self.init();
                                         }, 120000);
-                                        /*var timerId = setTimeout(function () {
-                                            clearTimeout(timerId);
-                                            monitorStorage(function (err, result) {
-                                                if (err) {
-                                                    log.error('Monitor storage:' + err);
-                                                    if (intervalId)
-                                                        clearInterval(intervalId);
-                                                    if (intervalIdDeploymentStatus)
-                                                        clearinterval(intervalIdDeploymentStatus);
-                                                    return;
-                                                }
-                                            });
-                                        }, 120000);*/
                                     }
 
                                 });
@@ -291,14 +296,14 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                     if (err) {
                         return callback(err, null);
                     }
-                    log.info("Status code:"+data.statusCode);
+                    log.info("Status code:" + data.statusCode);
                     if (data.deployment.properties.provisioningState === 'Running' || data.deployment.properties.provisioningState === 'Accepted') {
-                        console.log('Deploying status:' + data.deployment.properties.provisioningState);
+                        log.info('DEPLOYMENT STATUS:' + data.deployment.properties.provisioningState);
                     } else if (data.deployment.properties.provisioningState === 'Failed') {
                         return callback(new Error('Deployment Failed'));
                     } else {
                         return callback(null, data.deployment.properties.provisioningState);
-                    }      
+                    }
                 });
             } catch (e) {
                 callback(e, null);
@@ -342,13 +347,13 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
         var arr = statFile.split(os.EOL);
         //console.log(arr[0]);
         var stats = arr[0].split(/\s+/g, 5);
-        console.log(stats);
+        //console.log(stats);
         return stats;
     }
     
     function writeUsageToStorage(callback) {
         try {
-            console.log('Calculating CPU load....');
+            log.info('CALCULATING CPU USAGE..');
             var stat1 = getStats();
             var stat2;
             timerId = setTimeout(function () {
@@ -388,7 +393,6 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
     AutoscaleNodeOperations.prototype.init = function () {
         try {
             intervalId = setInterval(function () {
-                console.log('Next interval started');
                 writeUsageToStorage(function (err, result) {
                     if (err) {
                         if (timerId)

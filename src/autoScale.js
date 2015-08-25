@@ -149,7 +149,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     
     function monitorStorage(callback) {
         var intervalId = setInterval(function () {
-            log.info('MONITORING CPU.');
+            log.info('MONITORING CPU...');
             self.storageOperations.readTable(function (err, percentage) {
                 if (err) {
                     clearInterval(intervalId);
@@ -159,10 +159,10 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                 try {
                     var p = calculateAverageCpuLoad(percentage);
                     if (p > self.upperThreshold) {
-                        log.warn('CPU USAGE PERCENTAGE' + p);
+                        log.warn('CPU USAGE PERCENTAGE: ' + p);
                         i++;
                     } else {
-                        log.info('CPU USAGE PERCENTAGE' + p);
+                        log.info('CPU USAGE PERCENTAGE: ' + p);
                         i--;
                         if (i < 0)
                             i = 0;

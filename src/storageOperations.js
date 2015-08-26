@@ -37,7 +37,7 @@ StorageOperations.prototype.readTable = function (callback) {
             if (error) {
                 return callback(error.message, null);
             }
-            log.info('STROAGE READ STATUS :' + response.statusCode);
+            log.info('Storage read status:' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 return callback(null, result.entries);
             }
@@ -55,12 +55,12 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
     try {
         tableSvc = azureStorage.createTableService(this.accountName, this.accessKey);
         tableSvc.tableName = this.tableName;
-        log.info("TABLE NAME : " + tableSvc.tableName);
+        log.info("Table name : " + tableSvc.tableName);
         tableSvc.createTableIfNotExists(tableSvc.tableName, function (error, result, response) {
             if (error) {
                 return callback(error.message, null);
             }
-            log.info('STORAGE TABLE EXIST, STATUS:' + response.statusCode);
+            log.info('Storage table exist, status:' + response.statusCode);
             if (response.statusCode === 200 || response.statusCode === 204) {
                 //console.log(response.statusCode);
                 
@@ -88,7 +88,7 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
                 }
             }
             else {
-                err = new Error('ERROR STATUS CODE:' + response.statusCode);
+                err = new Error('Error status code:' + response.statusCode);
                 return callback(err, null);
             }
         });
@@ -100,8 +100,8 @@ StorageOperations.prototype.writeTable = function (usage, resourceGroup, callbac
 var insertEntity = function (usage, hostname, resourceGroup, callback) {
     try {
         var host = hostname.replace(/\n|\r/g, '');
-        log.info('ENTRY FOR HOSTNAME:' + host);
-        log.info('USAGE:' + usage);
+        log.info('Enter entities for hostname: ' + host);
+        log.info('Usage:' + usage);
         
         var entGen = azureStorage.TableUtilities.entityGenerator;
         var entity = {
@@ -117,7 +117,7 @@ var insertEntity = function (usage, hostname, resourceGroup, callback) {
                 //console.log(error);
                 return callback(error.message, null);
             }
-            log.info('INSERT STATUS CODE: ' + response.statusCode);
+            log.info('Insert status code: ' + response.statusCode);
             //console.log(response.statusCode);
             return callback(null, response.statusCode);
                             

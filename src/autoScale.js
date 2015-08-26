@@ -31,13 +31,13 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
         timerId = null;
         intervalIdDeploymentStatus = null;
         intervalId = null;
-
+        
         if (configFileUrl === null || configFileUrl === undefined) {
             log.error('Configuration file cannot be null.');
             return;
         }
-    
-        log.info('CONFIG FILE URL:' + configFileUrl);
+        
+        log.info('Configuartion file:' + configFileUrl);
         
         try {
             
@@ -95,18 +95,19 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     }
     
     AutoscaleAgentOperations.prototype.init = function () {
-        log.info('STARTING AUTOSCALE AGENT...');
+        log.info('Starting Autoscale agent...');
         
         self.templateOperations.getDeploymentTemplate(function (err, template) {
-            log.info('DOWNLOADED THE TEMPLATE.');
+            
             if (err) {
                 log.error(err.message);
                 return;
             }
             try {
+                log.info('Created and saved deployment template.');
                 self.template = template;
                 waitForSlaves(template.properties.parameters.slaveCount.value, function (err, result) {
-                    log.info('ALL SLAVES ARE UP..STARTED MONITORING THE USAGE.');
+                    log.info('All slaves are up now, started monitoring.');
                     monitorStorage(function (err, result) {
                         if (err) {
                             log.error(err.message);
@@ -131,14 +132,14 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     }
     
     function waitForSlaves(slaveCount, callback) {
-        log.info('WAITING FOR ALL NODES TO GET UP');
+        log.info('Waiting for the nodes to spin up.');
         var intId = setInterval(function () {
             self.storageOperations.readTable(function (err, storageEntries) {
                 if (err) {
                     clearInterval(intId);
                     return callback(err, null);
                 }
-                log.info('ACTUAL SLAVE COUNT:' + slaveCount + ' # OF SLAVES UP:' + storageEntries.length);
+                log.info('# of slaves up are:' + storageEntries.length + ', Autoscaling starts when ' + slaveCount + ' nodes are ready');
                 if (storageEntries.length === slaveCount) {
                     clearInterval(intId);
                     return callback(null);
@@ -149,7 +150,6 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
     
     function monitorStorage(callback) {
         var intervalId = setInterval(function () {
-            log.info('MONITORING CPU...');
             self.storageOperations.readTable(function (err, percentage) {
                 if (err) {
                     clearInterval(intervalId);
@@ -159,10 +159,10 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                 try {
                     var p = calculateAverageCpuLoad(percentage);
                     if (p > self.upperThreshold) {
-                        log.warn('CPU USAGE PERCENTAGE: ' + p);
+                        log.warn('Cpu usage(%): ' + p);
                         i++;
                     } else {
-                        log.info('CPU USAGE PERCENTAGE: ' + p);
+                        log.info('Cpu usage(%): ' + p);
                         i--;
                         if (i < 0)
                             i = 0;
@@ -172,7 +172,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                     var scaling = new events.EventEmitter();
                     if (i >= 3) {
                         i = 0;
-                        log.info('SCALING UP');
+                        log.info('Scalign up the cluster.');
                         clearInterval(intervalId);  //clear monitoring timeout
                         scaling.on('scaleup', function () {
                             scaleUp(self.count, self.template, function (err, result) {
@@ -194,7 +194,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
         try {
             template.properties.parameters.slaveCount.value = template.properties.parameters.slaveCount.value + count; // creating template
             
-            log.info('TOTAL SLAVE COUNT AFTER SCALING UP:' + template.properties.parameters.slaveCount.value);
+            log.info('Total slaves after scaling operation: ' + template.properties.parameters.slaveCount.value);
             //console.log('count:' + template.properties.parameters.Count.value);
             getToken(function (err, token) {
                 if (err) {
@@ -209,8 +209,8 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                             return callback(err, null);
                         }
                         try {
-                            log.info('DEPLOYING ' + self.deploymentName);
-                            log.info('STATUS OF DEPLOYMENT:' + result.statusCode);
+                            log.info('Deploying ' + self.deploymentName+',Status code: '+ result.statusCode);
+                         
                             intervalIdDeploymentStatus = setInterval(function () {
                                 checkDeploymentStatus(function (err, result) {
                                     if (err) {
@@ -220,8 +220,9 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                                     if (result === 'Succeeded') {
                                         clearInterval(intervalIdDeploymentStatus);
                                         fs.writeFileSync(self.templateOperations.deploymentTemplate, JSON.stringify(template, null, 4));
+                                        log.info(self.deploymentName + 'Succeeded, Status code: ' + result.statusCode);
                                         setTimeout(function () {
-                                            console.log("SETTING TIMEOUT FOR CPU LOAD TO SETTLE DOWN!!");
+                                            console.log("Setting timeout for stablizing the CPU usage for scaling up operation.");
                                             self.init();
                                         }, 120000);
                                     }
@@ -298,7 +299,7 @@ var AutoscaleAgentOperations = (function (configFileUrl) {
                     }
                     log.info("Status code:" + data.statusCode);
                     if (data.deployment.properties.provisioningState === 'Running' || data.deployment.properties.provisioningState === 'Accepted') {
-                        log.info('DEPLOYMENT STATUS:' + data.deployment.properties.provisioningState);
+                        log.info('Deployment status:' + data.deployment.properties.provisioningState);
                     } else if (data.deployment.properties.provisioningState === 'Failed') {
                         return callback(new Error('Deployment Failed'));
                     } else {
@@ -353,7 +354,7 @@ var AutoscaleNodeOperations = (function (configFileUrl) {
     
     function writeUsageToStorage(callback) {
         try {
-            log.info('CALCULATING CPU USAGE..');
+            //log.info('CALCULATING CPU USAGE..');
             var stat1 = getStats();
             var stat2;
             timerId = setTimeout(function () {
@@ -453,7 +454,7 @@ function downloadJson(url, file, callback) {
             
             try {
                 var name = fileDir + '//' + file + '.json';
-                console.log('name' + name);
+                //console.log('name' + name);
                 fs.writeFileSync(name, body);
                 callback(null, name);
             } catch (e) {
